@@ -18,6 +18,7 @@
 package org.apache.flink.autoscaler.state;
 
 import org.apache.flink.autoscaler.JobAutoScalerContext;
+import org.apache.flink.autoscaler.Rescaling;
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
@@ -58,9 +59,21 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
     }
 
     @Override
+    public void storeScalingTracking(
+            Context jobContext, SortedMap<Instant, Rescaling> rescalingHistory) throws Exception {
+        // TODO: noop for now
+    }
+
+    @Override
     public Optional<Map<JobVertexID, SortedMap<Instant, ScalingSummary>>> getScalingHistory(
             Context jobContext) {
         return Optional.ofNullable(scalingHistoryStore.get(jobContext.getJobKey()));
+    }
+
+    @Override
+    public Optional<SortedMap<Instant, Rescaling>> getScalingTracking(Context jobContext)
+            throws Exception {
+        return Optional.empty();
     }
 
     @Override

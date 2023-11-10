@@ -18,6 +18,7 @@
 package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.autoscaler.Rescaling;
 import org.apache.flink.autoscaler.ScalingSummary;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
@@ -56,6 +57,7 @@ public class KubernetesAutoScalerStateStore
     private static final Logger LOG = LoggerFactory.getLogger(KubernetesAutoScalerStateStore.class);
 
     @VisibleForTesting protected static final String SCALING_HISTORY_KEY = "scalingHistory";
+    @VisibleForTesting protected static final String RESCALING_HISTORY_KEY = "rescalingHistory";
 
     @VisibleForTesting protected static final String COLLECTED_METRICS_KEY = "collectedMetrics";
 
@@ -84,6 +86,14 @@ public class KubernetesAutoScalerStateStore
     }
 
     @Override
+    public void storeScalingTracking(
+            KubernetesJobAutoScalerContext jobContext,
+            SortedMap<Instant, Rescaling> rescalingHistory) {
+        configMapStore.putSerializedState(
+                jobContext, RESCALING_HISTORY_KEY, serializeRescalingHistory(rescalingHistory));
+    }
+
+    @Override
     public Optional<Map<JobVertexID, SortedMap<Instant, ScalingSummary>>> getScalingHistory(
             KubernetesJobAutoScalerContext jobContext) {
         Optional<String> serializedScalingHistory =
@@ -98,6 +108,25 @@ public class KubernetesAutoScalerStateStore
                     "Could not deserialize scaling history, possibly the format changed. Discarding...",
                     e);
             configMapStore.removeSerializedState(jobContext, SCALING_HISTORY_KEY);
+            return Optional.empty();
+        }
+    }
+
+    @Override
+    public Optional<SortedMap<Instant, Rescaling>> getScalingTracking(
+            KubernetesJobAutoScalerContext jobContext) throws Exception {
+        Optional<String> serializedRescalingHistory =
+                configMapStore.getSerializedState(jobContext, RESCALING_HISTORY_KEY);
+        if (serializedRescalingHistory.isEmpty()) {
+            return Optional.empty();
+        }
+        try {
+            return Optional.of(deserializeRescalingHistory(serializedRescalingHistory.get()));
+        } catch (JacksonException e) {
+            LOG.error(
+                    "Could not deserialize rescaling history, possibly the format changed. Discarding...",
+                    e);
+            configMapStore.removeSerializedState(jobContext, RESCALING_HISTORY_KEY);
             return Optional.empty();
         }
     }
@@ -175,12 +204,28 @@ public class KubernetesAutoScalerStateStore
     @SneakyThrows
     protected static String serializeScalingHistory(
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
-        return compress(YAML_MAPPER.writeValueAsString(scalingHistory));
+        //        return compress(YAML_MAPPER.writeValueAsString(scalingHistory));
+        return YAML_MAPPER.writeValueAsString(scalingHistory);
+    }
+
+    @SneakyThrows
+    protected static String serializeRescalingHistory(Map<Instant, Rescaling> rescalingHistory) {
+        //        return compress(YAML_MAPPER.writeValueAsString(rescalingHistory));
+        return YAML_MAPPER.writeValueAsString(rescalingHistory);
     }
 
     private static Map<JobVertexID, SortedMap<Instant, ScalingSummary>> deserializeScalingHistory(
             String scalingHistory) throws JacksonException {
-        return YAML_MAPPER.readValue(decompress(scalingHistory), new TypeReference<>() {});
+        //        return YAML_MAPPER.readValue(decompress(scalingHistory), new TypeReference<>()
+        // {});
+        return YAML_MAPPER.readValue(scalingHistory, new TypeReference<>() {});
+    }
+
+    private static SortedMap<Instant, Rescaling> deserializeRescalingHistory(
+            String rescalingHistory) throws JacksonException {
+        //        return YAML_MAPPER.readValue(decompress(rescalingHistory), new TypeReference<>()
+        // {});
+        return YAML_MAPPER.readValue(rescalingHistory, new TypeReference<>() {});
     }
 
     @VisibleForTesting

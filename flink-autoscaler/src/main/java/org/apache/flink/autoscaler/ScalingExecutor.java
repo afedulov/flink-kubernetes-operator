@@ -17,7 +17,9 @@
 
 package org.apache.flink.autoscaler;
 
+import java.util.TreeMap;
 import org.apache.flink.annotation.VisibleForTesting;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.event.AutoScalerEventHandler;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
@@ -77,10 +79,28 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics)
             throws Exception {
 
+        var rescalingHistoryOptional = autoScalerStateStore.getScalingTracking(context);
+        var rescalingHistory = rescalingHistoryOptional.orElse(new TreeMap<>());
+        var now = clock.instant();
+
+        if (context.getJobStatus() == JobStatus.RUNNING) {
+            // TODO: can the job be observed as RUNNING even after the rescaling action got applied?
+            if (!rescalingHistory.isEmpty()) {
+                System.out.println(">>> Previously rescaled job transitioned to RUNNING ");
+                var rescaling = rescalingHistory.get(rescalingHistory.lastKey());
+                if (rescaling.getEndTime() == null) {
+                    rescaling.setEndTime(now);
+                    autoScalerStateStore.storeScalingTracking(context, rescalingHistory);
+                }
+            }
+        }
+
         var conf = context.getConfiguration();
-        var scalingHistory = getTrimmedScalingHistory(autoScalerStateStore, context, Instant.now());
+        var scalingHistory = getTrimmedScalingHistory(autoScalerStateStore, context, now);
+
         var scalingSummaries = computeScalingSummary(context, evaluatedMetrics, scalingHistory);
 
+        System.out.println(">>> scaleResource: " + scalingSummaries);
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
             return false;
@@ -101,7 +121,22 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
         }
 
         addToScalingHistoryAndStore(
-                autoScalerStateStore, context, scalingHistory, clock.instant(), scalingSummaries);
+                autoScalerStateStore, context, scalingHistory, now, scalingSummaries);
+
+        var newParallelism =
+                scalingSummaries.entrySet().stream()
+                        .collect(
+                                HashMap<JobVertexID, Integer>::new,
+                                (map, entry) ->
+                                        map.put(
+                                                entry.getKey(),
+                                                entry.getValue().getNewParallelism()),
+                                Map::putAll);
+        Rescaling rescaling = new Rescaling(newParallelism);
+        rescalingHistory.put(now, rescaling);
+
+        autoScalerStateStore.storeScalingTracking(context, rescalingHistory);
+
         autoScalerStateStore.storeParallelismOverrides(
                 context, getVertexParallelismOverrides(evaluatedMetrics, scalingSummaries));
 
