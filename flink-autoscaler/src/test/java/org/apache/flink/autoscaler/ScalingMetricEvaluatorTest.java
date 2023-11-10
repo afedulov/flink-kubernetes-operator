@@ -473,7 +473,8 @@ public class ScalingMetricEvaluatorTest {
         map.put(TARGET_DATA_RATE, new EvaluatedScalingMetric(Double.NaN, inputTargetRate));
         map.put(CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchUpRate));
 
-        ScalingMetricEvaluator.computeProcessingRateThresholds(map, conf, catchingUp);
+        ScalingMetricEvaluator.computeProcessingRateThresholds(
+                map, conf, catchingUp, new ScalingTracking());
         return Tuple2.of(
                 map.get(SCALE_UP_RATE_THRESHOLD).getCurrent(),
                 map.get(SCALE_DOWN_RATE_THRESHOLD).getCurrent());

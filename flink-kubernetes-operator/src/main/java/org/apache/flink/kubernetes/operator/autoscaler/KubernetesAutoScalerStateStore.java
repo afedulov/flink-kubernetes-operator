@@ -19,6 +19,7 @@ package org.apache.flink.kubernetes.operator.autoscaler;
 
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.autoscaler.ScalingSummary;
+import org.apache.flink.autoscaler.ScalingTracking;
 import org.apache.flink.autoscaler.metrics.CollectedMetrics;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.autoscaler.utils.AutoScalerSerDeModule;
@@ -28,6 +29,7 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 import com.fasterxml.jackson.core.JacksonException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.javaoperatorsdk.operator.processing.event.ResourceID;
@@ -58,7 +60,7 @@ public class KubernetesAutoScalerStateStore
     private static final Logger LOG = LoggerFactory.getLogger(KubernetesAutoScalerStateStore.class);
 
     @VisibleForTesting protected static final String SCALING_HISTORY_KEY = "scalingHistory";
-
+    @VisibleForTesting protected static final String SCALING_TRACKING_KEY = "_scalingTracking";
     @VisibleForTesting protected static final String COLLECTED_METRICS_KEY = "collectedMetrics";
 
     @VisibleForTesting
@@ -69,7 +71,8 @@ public class KubernetesAutoScalerStateStore
     protected static final ObjectMapper YAML_MAPPER =
             new ObjectMapper(yamlFactory())
                     .registerModule(new JavaTimeModule())
-                    .registerModule(new AutoScalerSerDeModule());
+                    .registerModule(new AutoScalerSerDeModule())
+                    .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
 
     private final ConfigMapStore configMapStore;
 
@@ -83,6 +86,13 @@ public class KubernetesAutoScalerStateStore
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
         configMapStore.putSerializedState(
                 jobContext, SCALING_HISTORY_KEY, serializeScalingHistory(scalingHistory));
+    }
+
+    @Override
+    public void storeScalingTracking(
+            KubernetesJobAutoScalerContext jobContext, ScalingTracking scalingTrack) {
+        configMapStore.putSerializedState(
+                jobContext, SCALING_TRACKING_KEY, serializeScalingTracking(scalingTrack));
     }
 
     @Override
@@ -101,6 +111,25 @@ public class KubernetesAutoScalerStateStore
                     e);
             configMapStore.removeSerializedState(jobContext, SCALING_HISTORY_KEY);
             return new HashMap<>();
+        }
+    }
+
+    @Override
+    public ScalingTracking getScalingTracking(KubernetesJobAutoScalerContext jobContext)
+            throws Exception {
+        Optional<String> serializedRescalingHistory =
+                configMapStore.getSerializedState(jobContext, SCALING_TRACKING_KEY);
+        if (serializedRescalingHistory.isEmpty()) {
+            return new ScalingTracking();
+        }
+        try {
+            return deserializeScalingTracking(serializedRescalingHistory.get());
+        } catch (JacksonException e) {
+            LOG.error(
+                    "Could not deseri alize rescaling history, possibly the format changed. Discarding...",
+                    e);
+            configMapStore.removeSerializedState(jobContext, SCALING_TRACKING_KEY);
+            return new ScalingTracking();
         }
     }
 
@@ -177,12 +206,32 @@ public class KubernetesAutoScalerStateStore
     @SneakyThrows
     protected static String serializeScalingHistory(
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
-        return compress(YAML_MAPPER.writeValueAsString(scalingHistory));
+        // FIXME: compression temporarily disabled
+        //        return compress(YAML_MAPPER.writeValueAsString(scalingHistory));
+        return YAML_MAPPER.writeValueAsString(scalingHistory);
+    }
+
+    @SneakyThrows
+    protected static String serializeScalingTracking(ScalingTracking scalingTracking) {
+        // FIXME: compression temporarily disabled
+        //        return compress(YAML_MAPPER.writeValueAsString(rescalingHistory));
+        return YAML_MAPPER.writeValueAsString(scalingTracking);
     }
 
     private static Map<JobVertexID, SortedMap<Instant, ScalingSummary>> deserializeScalingHistory(
             String scalingHistory) throws JacksonException {
-        return YAML_MAPPER.readValue(decompress(scalingHistory), new TypeReference<>() {});
+        // FIXME: compression temporarily disabled
+        //        return YAML_MAPPER.readValue(decompress(scalingHistory), new TypeReference<>()
+        // {});
+        return YAML_MAPPER.readValue(scalingHistory, new TypeReference<>() {});
+    }
+
+    private static ScalingTracking deserializeScalingTracking(String scalingTracking)
+            throws JacksonException {
+        // FIXME: compression temporarily disabled
+        //        return YAML_MAPPER.readValue(decompress(scalingTracking), new TypeReference<>()
+        // {});
+        return YAML_MAPPER.readValue(scalingTracking, new TypeReference<>() {});
     }
 
     @VisibleForTesting
@@ -212,6 +261,13 @@ public class KubernetesAutoScalerStateStore
                         .getSerializedState(context, SCALING_HISTORY_KEY)
                         .map(String::length)
                         .orElse(0);
+
+        int scalingTrackingSize =
+                configMapStore
+                        .getSerializedState(context, SCALING_TRACKING_KEY)
+                        .map(String::length)
+                        .orElse(0);
+
         int metricHistorySize =
                 configMapStore
                         .getSerializedState(context, COLLECTED_METRICS_KEY)
@@ -219,7 +275,7 @@ public class KubernetesAutoScalerStateStore
                         .orElse(0);
 
         SortedMap<Instant, CollectedMetrics> metricHistory = getCollectedMetrics(context);
-        while (scalingHistorySize + metricHistorySize > MAX_CM_BYTES) {
+        while (scalingHistorySize + metricHistorySize + scalingTrackingSize > MAX_CM_BYTES) {
             if (metricHistory.isEmpty()) {
                 return;
             }

@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler.utils;
 
+import org.apache.flink.autoscaler.ScalingTracking;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
 import org.apache.flink.autoscaler.metrics.ScalingMetric;
@@ -40,7 +41,8 @@ public class AutoScalerUtils {
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             Configuration conf,
             double targetUtilization,
-            boolean withRestart) {
+            boolean withRestart,
+            ScalingTracking scalingTracking) {
 
         // Target = Lag Catchup Rate + Restart Catchup Rate + Processing at utilization
         // Target = LAG/CATCH_UP + INPUT_RATE*RESTART/CATCH_UP + INPUT_RATE/TARGET_UTIL
@@ -51,7 +53,7 @@ public class AutoScalerUtils {
         }
 
         double catchUpTargetSec = conf.get(AutoScalerOptions.CATCH_UP_DURATION).toSeconds();
-        double restartTimeSec = conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
+        double restartTimeSec = scalingTracking.getMaxRestartTimeOrDefault(conf);
 
         targetUtilization = Math.max(0., targetUtilization);
         targetUtilization = Math.min(1., targetUtilization);
