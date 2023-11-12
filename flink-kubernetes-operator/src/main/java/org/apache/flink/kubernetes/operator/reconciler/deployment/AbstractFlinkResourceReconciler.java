@@ -99,6 +99,7 @@ public abstract class AbstractFlinkResourceReconciler<
 
     @Override
     public void reconcile(FlinkResourceContext<CR> ctx) throws Exception {
+        LOG.info(">>> reconcile ");
         var cr = ctx.getResource();
         var status = cr.getStatus();
         var reconciliationStatus = cr.getStatus().getReconciliationStatus();

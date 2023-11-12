@@ -17,7 +17,6 @@
 
 package org.apache.flink.autoscaler;
 
-import java.util.TreeMap;
 import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
@@ -79,28 +78,24 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics)
             throws Exception {
 
-        var rescalingHistoryOptional = autoScalerStateStore.getScalingTracking(context);
-        var rescalingHistory = rescalingHistoryOptional.orElse(new TreeMap<>());
+        var scalingTracking =
+                autoScalerStateStore.getScalingTracking(context).orElse(new ScalingTracking());
         var now = clock.instant();
 
         if (context.getJobStatus() == JobStatus.RUNNING) {
-            // TODO: can the job be observed as RUNNING even after the rescaling action got applied?
-            if (!rescalingHistory.isEmpty()) {
-                System.out.println(">>> Previously rescaled job transitioned to RUNNING ");
-                var rescaling = rescalingHistory.get(rescalingHistory.lastKey());
-                if (rescaling.getEndTime() == null) {
-                    rescaling.setEndTime(now);
-                    autoScalerStateStore.storeScalingTracking(context, rescalingHistory);
-                }
+            // TODO: check if the job can be observed as RUNNING even after the rescaling action got
+            //   applied, but before the actual rescaling?
+            if (scalingTracking.setEndTimeIfTrackedAndParallelismMatches(now, evaluatedMetrics)) {
+                autoScalerStateStore.storeScalingTracking(context, scalingTracking);
             }
         }
 
         var conf = context.getConfiguration();
         var scalingHistory = getTrimmedScalingHistory(autoScalerStateStore, context, now);
 
-        var scalingSummaries = computeScalingSummary(context, evaluatedMetrics, scalingHistory);
+        var scalingSummaries =
+                computeScalingSummary(context, evaluatedMetrics, scalingHistory, scalingTracking);
 
-        System.out.println(">>> scaleResource: " + scalingSummaries);
         if (scalingSummaries.isEmpty()) {
             LOG.info("All job vertices are currently running at their target parallelism.");
             return false;
@@ -120,22 +115,14 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             return false;
         }
 
+        System.out.printf(">>> SCALING!");
         addToScalingHistoryAndStore(
                 autoScalerStateStore, context, scalingHistory, now, scalingSummaries);
 
-        var newParallelism =
-                scalingSummaries.entrySet().stream()
-                        .collect(
-                                HashMap<JobVertexID, Integer>::new,
-                                (map, entry) ->
-                                        map.put(
-                                                entry.getKey(),
-                                                entry.getValue().getNewParallelism()),
-                                Map::putAll);
-        Rescaling rescaling = new Rescaling(newParallelism);
-        rescalingHistory.put(now, rescaling);
+        ScalingRecord scalingTrack = ScalingRecord.from(scalingSummaries);
+        scalingTracking.addScalingRecord(now, scalingTrack);
 
-        autoScalerStateStore.storeScalingTracking(context, rescalingHistory);
+        autoScalerStateStore.storeScalingTracking(context, scalingTracking);
 
         autoScalerStateStore.storeParallelismOverrides(
                 context, getVertexParallelismOverrides(evaluatedMetrics, scalingSummaries));
@@ -193,7 +180,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
     Map<JobVertexID, ScalingSummary> computeScalingSummary(
             Context context,
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
-            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
+            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
+            ScalingTracking scalingTracking) {
 
         var out = new HashMap<JobVertexID, ScalingSummary>();
         var excludeVertexIdList =
@@ -213,7 +201,8 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
                                         v,
                                         metrics,
                                         scalingHistory.getOrDefault(
-                                                v, Collections.emptySortedMap()));
+                                                v, Collections.emptySortedMap()),
+                                        scalingTracking);
                         if (currentParallelism != newParallelism) {
                             out.put(
                                     v,

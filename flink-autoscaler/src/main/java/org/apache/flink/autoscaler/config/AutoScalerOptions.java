@@ -142,6 +142,28 @@ public class AutoScalerOptions {
                     .withDescription(
                             "Expected restart time to be used until the operator can determine it reliably from history.");
 
+    public static final ConfigOption<Boolean> PREFER_TRACKED_RESTART_TIME =
+            autoScalerConfig("restart.time.tracked.enabled")
+                    .booleanType()
+                    .defaultValue(false)
+                    .withDescription(
+                            "Whether to use the actually observed and tracked rescaling restart times instead of the fixed '"
+                                    + RESTART_TIME.key()
+                                    + "' value. If set to true, the '"
+                                    + RESTART_TIME.key()
+                                    + "' will act as an upper bound (the calculated average is capped by its value).");
+
+    public static final ConfigOption<Integer> NUM_RESTART_SAMPLES =
+            autoScalerConfig("restart.time.tracked.average.samples")
+                    .intType()
+                    .defaultValue(2)
+                    .withDescription(
+                            "How many samples of restart times from previous rescalings to take for calculating the average when '"
+                                    + PREFER_TRACKED_RESTART_TIME.key()
+                                    + "' is set to true. Until the set number of samples is collected, will fall back to '"
+                                    + RESTART_TIME.key()
+                                    + "' .");
+
     public static final ConfigOption<Duration> BACKLOG_PROCESSING_LAG_THRESHOLD =
             autoScalerConfig("backlog-processing.lag-threshold")
                     .durationType()
