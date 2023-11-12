@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.CATCH_UP_DATA_RATE;
 import static org.apache.flink.autoscaler.metrics.ScalingMetric.TARGET_DATA_RATE;
 
@@ -41,8 +42,7 @@ public class AutoScalerUtils {
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             Configuration conf,
             double targetUtilization,
-            boolean withRestart,
-            ScalingTracking scalingTracking) {
+            double restartTimeSec) {
 
         // Target = Lag Catchup Rate + Restart Catchup Rate + Processing at utilization
         // Target = LAG/CATCH_UP + INPUT_RATE*RESTART/CATCH_UP + INPUT_RATE/TARGET_UTIL
@@ -53,7 +53,6 @@ public class AutoScalerUtils {
         }
 
         double catchUpTargetSec = conf.get(AutoScalerOptions.CATCH_UP_DURATION).toSeconds();
-        double restartTimeSec = scalingTracking.getAverageRestartTimeOrDefault(conf);
 
         targetUtilization = Math.max(0., targetUtilization);
         targetUtilization = Math.min(1., targetUtilization);
@@ -68,12 +67,19 @@ public class AutoScalerUtils {
         }
 
         double restartCatchupRate =
-                !withRestart || catchUpTargetSec == 0
+                restartTimeSec < 0 || catchUpTargetSec == 0
                         ? 0
                         : (avgInputTargetRate * restartTimeSec) / catchUpTargetSec;
         double inputTargetAtUtilization = avgInputTargetRate / targetUtilization;
 
         return Math.round(lagCatchupTargetRate + restartCatchupRate + inputTargetAtUtilization);
+    }
+
+    public static double getTargetProcessingCapacity(
+            Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
+            Configuration conf,
+            double targetUtilization) {
+        return getTargetProcessingCapacity(evaluatedMetrics, conf, targetUtilization, -1);
     }
 
     /**

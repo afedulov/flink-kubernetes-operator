@@ -83,13 +83,10 @@ public class JobVertexScaler<KEY, Context extends JobAutoScalerContext<KEY>> {
             return currentParallelism;
         }
 
+        double restartTimeSec = scalingTracking.getMaxRestartTimeOrDefault(conf);
         double targetCapacity =
                 AutoScalerUtils.getTargetProcessingCapacity(
-                        evaluatedMetrics,
-                        conf,
-                        conf.get(TARGET_UTILIZATION),
-                        true,
-                        scalingTracking);
+                        evaluatedMetrics, conf, conf.get(TARGET_UTILIZATION), restartTimeSec);
         if (Double.isNaN(targetCapacity)) {
             LOG.warn(
                     "Target data rate is not available for {}, cannot compute new parallelism",

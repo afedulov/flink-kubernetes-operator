@@ -100,29 +100,27 @@ public class ScalingTracking {
         }
     }
 
-    public double getAverageRestartTimeOrDefault(Configuration conf) {
+    public double getMaxRestartTimeOrDefault(Configuration conf) {
+        long maxRestartTime = -1;
+        long restartTimeFromConfig = conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
         if (conf.get(AutoScalerOptions.PREFER_TRACKED_RESTART_TIME)) {
+            int maxNumOfSamples = conf.get(AutoScalerOptions.NUM_RESTART_SAMPLES);
             int numSamples = 0;
-            int numRequiresSamples = conf.get(AutoScalerOptions.NUM_RESTART_SAMPLES);
-            var acc = Duration.ZERO;
             for (Map.Entry<Instant, ScalingRecord> entry : scalingRecords.entrySet()) {
-                if (numSamples == numRequiresSamples) {
+                if (numSamples == maxNumOfSamples) {
                     break;
                 }
                 var startTime = entry.getKey();
                 var endTime = entry.getValue().getEndTime();
-                if (endTime == null) {
-                    break; // only calculate if we have consecutive NUM_RESTART_SAMPLES
+                if (endTime != null) {
+                    var restartTime = Duration.between(startTime, endTime).toSeconds();
+                    maxRestartTime = Math.max(restartTime, maxRestartTime);
+                    numSamples++;
                 }
-                var restartTime = Duration.between(startTime, endTime);
-                acc = acc.plus(restartTime);
-                numSamples++;
-            }
-            if (numSamples == numRequiresSamples) {
-                double averageRestartTime = (double) acc.toMillis() / numSamples;
             }
         }
-
-        return conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
+        return maxRestartTime == -1
+                ? restartTimeFromConfig
+                : Math.min(maxRestartTime, restartTimeFromConfig);
     }
 }

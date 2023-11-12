@@ -227,10 +227,10 @@ public class ScalingMetricEvaluator {
         }
 
         double scaleUpThreshold =
-                AutoScalerUtils.getTargetProcessingCapacity(metrics, conf, upperUtilization, false);
+                AutoScalerUtils.getTargetProcessingCapacity(metrics, conf, upperUtilization);
 
         double scaleDownThreshold =
-                AutoScalerUtils.getTargetProcessingCapacity(metrics, conf, lowerUtilization, true);
+                AutoScalerUtils.getTargetProcessingCapacity(metrics, conf, lowerUtilization);
 
         metrics.put(SCALE_UP_RATE_THRESHOLD, EvaluatedScalingMetric.of(scaleUpThreshold));
         metrics.put(SCALE_DOWN_RATE_THRESHOLD, EvaluatedScalingMetric.of(scaleDownThreshold));
