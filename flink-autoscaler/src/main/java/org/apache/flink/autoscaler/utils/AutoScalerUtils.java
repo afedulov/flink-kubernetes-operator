@@ -42,7 +42,8 @@ public class AutoScalerUtils {
             Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
             Configuration conf,
             double targetUtilization,
-            double restartTimeSec) {
+            boolean withRestart,
+            ScalingTracking scalingTracking) {
 
         // Target = Lag Catchup Rate + Restart Catchup Rate + Processing at utilization
         // Target = LAG/CATCH_UP + INPUT_RATE*RESTART/CATCH_UP + INPUT_RATE/TARGET_UTIL
@@ -53,6 +54,7 @@ public class AutoScalerUtils {
         }
 
         double catchUpTargetSec = conf.get(AutoScalerOptions.CATCH_UP_DURATION).toSeconds();
+        double restartTimeSec = scalingTracking.getMaxRestartTimeOrDefault(conf);
 
         targetUtilization = Math.max(0., targetUtilization);
         targetUtilization = Math.min(1., targetUtilization);
@@ -67,19 +69,12 @@ public class AutoScalerUtils {
         }
 
         double restartCatchupRate =
-                restartTimeSec < 0 || catchUpTargetSec == 0
+                !withRestart || catchUpTargetSec == 0
                         ? 0
                         : (avgInputTargetRate * restartTimeSec) / catchUpTargetSec;
         double inputTargetAtUtilization = avgInputTargetRate / targetUtilization;
 
         return Math.round(lagCatchupTargetRate + restartCatchupRate + inputTargetAtUtilization);
-    }
-
-    public static double getTargetProcessingCapacity(
-            Map<ScalingMetric, EvaluatedScalingMetric> evaluatedMetrics,
-            Configuration conf,
-            double targetUtilization) {
-        return getTargetProcessingCapacity(evaluatedMetrics, conf, targetUtilization, -1);
     }
 
     /**

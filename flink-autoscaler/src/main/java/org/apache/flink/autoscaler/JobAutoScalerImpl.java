@@ -169,6 +169,9 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         }
         LOG.debug("Collected metrics: {}", collectedMetrics);
 
+        ScalingTracking scalingTracking =
+                stateStore.getScalingTracking(ctx).orElse(new ScalingTracking());
+
         var evaluatedMetrics = evaluator.evaluate(ctx.getConfiguration(), collectedMetrics);
         LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
         lastEvaluatedMetrics.put(ctx.getJobKey(), evaluatedMetrics);

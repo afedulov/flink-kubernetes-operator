@@ -477,7 +477,8 @@ public class JobVertexScalerTest {
         metrics.put(
                 ScalingMetric.TRUE_PROCESSING_RATE,
                 new EvaluatedScalingMetric(trueProcessingRate, trueProcessingRate));
-        ScalingMetricEvaluator.computeProcessingRateThresholds(metrics, conf, false);
+        ScalingMetricEvaluator.computeProcessingRateThresholds(
+                metrics, conf, false, new ScalingTracking());
         return metrics;
     }
 }
