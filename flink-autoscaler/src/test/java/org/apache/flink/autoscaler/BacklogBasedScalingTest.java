@@ -404,7 +404,7 @@ public class BacklogBasedScalingTest {
     private void setClocksTo(Instant time) {
         var clock = Clock.fixed(time, ZoneId.systemDefault());
         metricsCollector.setClock(clock);
-        scalingExecutor.setClock(clock);
+        autoscaler.setClock(clock);
     }
 
     private void assertFlinkMetricsCount(int scalingCount, int balancedCount) {

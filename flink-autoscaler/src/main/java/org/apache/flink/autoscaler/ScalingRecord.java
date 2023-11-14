@@ -17,14 +17,10 @@
 
 package org.apache.flink.autoscaler;
 
-import java.time.Instant;
-import java.util.HashMap;
-import java.util.Map;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.apache.flink.autoscaler.metrics.EvaluatedScalingMetric;
-import org.apache.flink.autoscaler.metrics.ScalingMetric;
-import org.apache.flink.runtime.jobgraph.JobVertexID;
+
+import java.time.Instant;
 
 /**
  * Class for tracking scaling details, including time it took for the job to transition to the
@@ -34,45 +30,4 @@ import org.apache.flink.runtime.jobgraph.JobVertexID;
 @NoArgsConstructor
 public class ScalingRecord {
     private Instant endTime;
-    private Map<JobVertexID, Integer> targetParallelism;
-
-    public ScalingRecord(Map<JobVertexID, Integer> targetParallelism) {
-        this.targetParallelism = targetParallelism;
-    }
-
-    public static ScalingRecord from(Map<JobVertexID, ScalingSummary> scalingSummaries) {
-        var targetParallelism =
-                scalingSummaries.entrySet().stream()
-                        .collect(
-                                HashMap<JobVertexID, Integer>::new,
-                                (map, entry) ->
-                                        map.put(
-                                                entry.getKey(),
-                                                entry.getValue().getNewParallelism()),
-                                Map::putAll);
-        return new ScalingRecord(targetParallelism);
-    }
-
-    public boolean targetParallelismMatchesActual(
-            Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics) {
-        return targetParallelism.entrySet().stream()
-                .allMatch(
-                        entry -> {
-                            var vertexID = entry.getKey();
-                            var target = entry.getValue();
-
-                            var metricsMap = evaluatedMetrics.get(vertexID);
-
-                            if (metricsMap == null) {
-                                return false;
-                            }
-
-                            var actualWrapper = metricsMap.get(ScalingMetric.PARALLELISM);
-                            if (actualWrapper == null) {
-                                return false;
-                            }
-                            var actual = (int) actualWrapper.getCurrent();
-                            return actual == target;
-                        });
-    }
 }

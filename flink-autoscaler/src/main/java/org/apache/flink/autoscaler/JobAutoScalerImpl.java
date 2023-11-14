@@ -42,6 +42,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_ENABLED;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
+import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.trimScalingHistory;
 
 /** The default implementation of {@link JobAutoScaler}. */
@@ -193,6 +194,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
             throws Exception {
 
         var collectedMetrics = metricsCollector.updateMetrics(ctx, stateStore);
+        var jobTopology = collectedMetrics.getJobTopology();
 
         if (collectedMetrics.getMetricHistory().isEmpty()) {
             return;
@@ -205,7 +207,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
 
         initRecommendedParallelism(evaluatedMetrics);
         autoscalerMetrics.registerScalingMetrics(
-                collectedMetrics.getJobTopology().getVerticesInTopologicalOrder(),
+                jobTopology.getVerticesInTopologicalOrder(),
                 () -> lastEvaluatedMetrics.get(ctx.getJobKey()));
 
         if (!collectedMetrics.isFullyCollected()) {
@@ -214,7 +216,19 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
             return;
         }
 
-        var parallelismChanged = scalingExecutor.scaleResource(ctx, evaluatedMetrics);
+        var now = clock.instant();
+        var scalingHistory = getTrimmedScalingHistory(stateStore, ctx, now);
+        var scalingTracking = stateStore.getScalingTracking(ctx);
+        if (ctx.getJobStatus() == JobStatus.RUNNING) {
+            if (scalingTracking.setEndTimeIfTrackedAndParallelismMatches(
+                    now, jobTopology, scalingHistory)) {
+                stateStore.storeScalingTracking(ctx, scalingTracking);
+            }
+        }
+
+        var parallelismChanged =
+                scalingExecutor.scaleResource(
+                        ctx, evaluatedMetrics, scalingHistory, scalingTracking, now);
 
         if (parallelismChanged) {
             autoscalerMetrics.incrementScaling();
