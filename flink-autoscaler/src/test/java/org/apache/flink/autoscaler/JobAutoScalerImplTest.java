@@ -122,6 +122,53 @@ public class JobAutoScalerImplTest {
                 "Expected scaling metric LOAD was not reported. Reporting is broken");
     }
 
+    @Test
+    // TODO: rename
+    void testTransitionToRunningDetected() throws Exception {
+        JobVertexID jobVertexID = new JobVertexID();
+        JobTopology jobTopology = new JobTopology(new VertexInfo(jobVertexID, Set.of(), 1, 10));
+
+        TestingMetricsCollector<JobID, JobAutoScalerContext<JobID>> metricsCollector =
+                new TestingMetricsCollector<>(jobTopology);
+        metricsCollector.setCurrentMetrics(
+                Map.of(
+                        jobVertexID,
+                        Map.of(
+                                FlinkMetric.BUSY_TIME_PER_SEC,
+                                new AggregatedMetric("load", 0., 420., 0., 0.))));
+        metricsCollector.setJobUpdateTs(Instant.ofEpochMilli(0));
+
+        ScalingMetricEvaluator evaluator = new ScalingMetricEvaluator();
+        ScalingExecutor<JobID, JobAutoScalerContext<JobID>> scalingExecutor =
+                new ScalingExecutor<>(eventCollector, stateStore);
+
+        var autoscaler =
+                new JobAutoScalerImpl<>(
+                        metricsCollector,
+                        evaluator,
+                        scalingExecutor,
+                        eventCollector,
+                        scalingRealizer,
+                        stateStore);
+
+        context.getJobStatus();
+
+        createJobAutoScalerContext(JobAutoScalerImpl. )
+
+        autoscaler.scale(context);
+
+        MetricGroup metricGroup = autoscaler.flinkMetrics.get(context.getJobKey()).getMetricGroup();
+        assertEquals(
+                0.42,
+                getGaugeValue(
+                        metricGroup,
+                        AutoscalerFlinkMetrics.CURRENT,
+                        AutoscalerFlinkMetrics.JOB_VERTEX_ID,
+                        jobVertexID.toHexString(),
+                        ScalingMetric.LOAD.name()),
+                "Expected scaling metric LOAD was not reported. Reporting is broken");
+    }
+
     @SuppressWarnings("unchecked")
     private static double getGaugeValue(
             MetricGroup metricGroup, String gaugeName, String... nestedMetricGroupNames) {

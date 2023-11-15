@@ -46,21 +46,15 @@ import java.util.stream.Collectors;
 @Builder
 public class ScalingTracking {
 
-    /** Time of starting the last rescaling. */
-    @JsonIgnore private long lastRescalingStartTimestamp;
-
     /** Details related to recent rescaling operations. */
     private final TreeMap<Instant, ScalingRecord> scalingRecords = new TreeMap<>();
-
-    // TODO: extract into a config parameter (currently not used)
-    @JsonIgnore private final Duration keptTimeSpan = Duration.ofHours(1);
 
     public void addScalingRecord(Instant startTimestamp, ScalingRecord scalingRecord) {
         scalingRecords.put(startTimestamp, scalingRecord);
     }
 
     @JsonIgnore
-    public Optional<Entry<Instant, ScalingRecord>> getLastScalingRecordEntry() {
+    public Optional<Entry<Instant, ScalingRecord>> getLatestScalingRecordEntry() {
         if (!scalingRecords.isEmpty()) {
             return Optional.of(scalingRecords.lastEntry());
         } else {
@@ -72,7 +66,7 @@ public class ScalingTracking {
             Instant now,
             JobTopology jobTopology,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
-        return getLastScalingRecordEntry()
+        return getLatestScalingRecordEntry()
                 .map(
                         entry -> {
                             var value = entry.getValue();
@@ -121,32 +115,35 @@ public class ScalingTracking {
                         });
     }
 
-    // TODO: currently not used, discuss cleanup
-    private void removeOldEvents() {
-        var threshold = Instant.now().minus(keptTimeSpan);
-        var entry = scalingRecords.pollFirstEntry();
-        while (entry != null && entry.getKey().compareTo(threshold) <= 0) {
-            scalingRecords.remove(entry.getKey());
-            entry = scalingRecords.pollFirstEntry();
+    /**
+     * Removes records from the internal map that are older than the specified time span and trims
+     * the number of records to the specified maximum count.
+     *
+     * @param keptTimeSpan Duration for how long recent records are to be kept.
+     * @param keptNumRecords The maximum number of recent records to keep.
+     */
+    public void removeOldRecords(Duration keptTimeSpan, int keptNumRecords) {
+        var cutoffTime = Instant.now().minus(keptTimeSpan);
+
+        // Remove records older than the cutoff time
+        scalingRecords.headMap(cutoffTime).clear();
+
+        // If the map size is still larger than keptNumRecords, trim further
+        while (scalingRecords.size() > keptNumRecords) {
+            scalingRecords.pollFirstEntry();
         }
     }
 
-    public double getMaxRestartTimeOrDefault(Configuration conf) {
+    public double getMaxRestartTimeSecondsOrDefault(Configuration conf) {
         long maxRestartTime = -1;
         long restartTimeFromConfig = conf.get(AutoScalerOptions.RESTART_TIME).toSeconds();
         if (conf.get(AutoScalerOptions.PREFER_TRACKED_RESTART_TIME)) {
-            int maxNumOfSamples = conf.get(AutoScalerOptions.NUM_RESTART_SAMPLES);
-            int numSamples = 0;
             for (Map.Entry<Instant, ScalingRecord> entry : scalingRecords.entrySet()) {
-                if (numSamples == maxNumOfSamples) {
-                    break;
-                }
                 var startTime = entry.getKey();
                 var endTime = entry.getValue().getEndTime();
                 if (endTime != null) {
                     var restartTime = Duration.between(startTime, endTime).toSeconds();
                     maxRestartTime = Math.max(restartTime, maxRestartTime);
-                    numSamples++;
                 }
             }
         }

@@ -43,6 +43,7 @@ import static org.apache.flink.autoscaler.config.AutoScalerOptions.AUTOSCALER_EN
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.initRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.AutoscalerFlinkMetrics.resetRecommendedParallelism;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingHistory;
+import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.getTrimmedScalingTracking;
 import static org.apache.flink.autoscaler.metrics.ScalingHistoryUtils.trimScalingHistory;
 
 /** The default implementation of {@link JobAutoScaler}. */
@@ -218,7 +219,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
 
         var now = clock.instant();
         var scalingHistory = getTrimmedScalingHistory(stateStore, ctx, now);
-        var scalingTracking = stateStore.getScalingTracking(ctx);
+        var scalingTracking = getTrimmedScalingTracking(stateStore, ctx);
         if (ctx.getJobStatus() == JobStatus.RUNNING) {
             if (scalingTracking.setEndTimeIfTrackedAndParallelismMatches(
                     now, jobTopology, scalingHistory)) {

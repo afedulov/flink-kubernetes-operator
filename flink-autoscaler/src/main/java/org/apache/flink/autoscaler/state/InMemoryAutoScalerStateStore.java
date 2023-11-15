@@ -47,10 +47,13 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
 
     private final Map<KEY, Map<String, String>> parallelismOverridesStore;
 
+    private final Map<KEY, ScalingTracking> scalingTrackingStore;
+
     public InMemoryAutoScalerStateStore() {
         scalingHistoryStore = new ConcurrentHashMap<>();
         collectedMetricsStore = new ConcurrentHashMap<>();
         parallelismOverridesStore = new ConcurrentHashMap<>();
+        scalingTrackingStore = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -61,12 +64,6 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
     }
 
     @Override
-    public void storeScalingTracking(Context jobContext, ScalingTracking scalingTracking)
-            throws Exception {
-        // TODO: noop for now
-    }
-
-    @Override
     public Map<JobVertexID, SortedMap<Instant, ScalingSummary>> getScalingHistory(
             Context jobContext) {
         return Optional.ofNullable(scalingHistoryStore.get(jobContext.getJobKey()))
@@ -74,9 +71,14 @@ public class InMemoryAutoScalerStateStore<KEY, Context extends JobAutoScalerCont
     }
 
     @Override
-    public ScalingTracking getScalingTracking(Context jobContext) throws Exception {
-        // TODO: noop for now
-        return new ScalingTracking();
+    public void storeScalingTracking(Context jobContext, ScalingTracking scalingTracking) {
+        scalingTrackingStore.put(jobContext.getJobKey(), scalingTracking);
+    }
+
+    @Override
+    public ScalingTracking getScalingTracking(Context jobContext) {
+        return Optional.ofNullable(scalingTrackingStore.get(jobContext.getJobKey()))
+                .orElse(new ScalingTracking());
     }
 
     @Override

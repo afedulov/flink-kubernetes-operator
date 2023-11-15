@@ -115,8 +115,7 @@ public class KubernetesAutoScalerStateStore
     }
 
     @Override
-    public ScalingTracking getScalingTracking(KubernetesJobAutoScalerContext jobContext)
-            throws Exception {
+    public ScalingTracking getScalingTracking(KubernetesJobAutoScalerContext jobContext) {
         Optional<String> serializedRescalingHistory =
                 configMapStore.getSerializedState(jobContext, SCALING_TRACKING_KEY);
         if (serializedRescalingHistory.isEmpty()) {

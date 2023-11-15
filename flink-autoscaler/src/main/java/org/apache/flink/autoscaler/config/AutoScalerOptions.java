@@ -154,15 +154,6 @@ public class AutoScalerOptions {
                                     + RESTART_TIME.key()
                                     + "' will act as an upper bound.");
 
-    public static final ConfigOption<Integer> NUM_RESTART_SAMPLES =
-            autoScalerConfig("restart.time.tracked.samples")
-                    .intType()
-                    .defaultValue(1) // TODO: set for testing, discuss a reasonable default
-                    .withDescription(
-                            "How many samples of restart times from previous rescalings to take into account when '"
-                                    + PREFER_TRACKED_RESTART_TIME.key()
-                                    + "' is set to true.");
-
     public static final ConfigOption<Duration> BACKLOG_PROCESSING_LAG_THRESHOLD =
             autoScalerConfig("backlog-processing.lag-threshold")
                     .durationType()

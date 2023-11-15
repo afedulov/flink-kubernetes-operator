@@ -40,6 +40,7 @@ import java.util.Set;
 import java.util.TreeMap;
 
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.CATCH_UP_DURATION;
+import static org.apache.flink.autoscaler.config.AutoScalerOptions.PREFER_TRACKED_RESTART_TIME;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.RESTART_TIME;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION;
 import static org.apache.flink.autoscaler.config.AutoScalerOptions.TARGET_UTILIZATION_BOUNDARY;
@@ -233,6 +234,40 @@ public class ScalingMetricEvaluatorTest {
         assertEquals(
                 Tuple2.of(1050., Double.POSITIVE_INFINITY), getThresholds(700, 350, conf, true));
         assertEquals(Tuple2.of(700., Double.POSITIVE_INFINITY), getThresholds(700, 0, conf, true));
+    }
+
+    @Test
+    public void testUtilizationBoundaryComputationWithRestartTimesTracking() {
+
+        var conf = new Configuration();
+        conf.set(TARGET_UTILIZATION, 0.8);
+        conf.set(TARGET_UTILIZATION_BOUNDARY, 0.1);
+        conf.set(RESTART_TIME, Duration.ofMinutes(10));
+        conf.set(CATCH_UP_DURATION, Duration.ZERO);
+        conf.set(PREFER_TRACKED_RESTART_TIME, true);
+
+        var scalingTracking = new ScalingTracking();
+        scalingTracking.addScalingRecord(
+                Instant.parse("2023-11-15T16:00:00.00Z"),
+                new ScalingRecord(Instant.parse("2023-11-15T16:03:00.00Z")));
+        scalingTracking.addScalingRecord(
+                Instant.parse("2023-11-15T16:20:00.00Z"),
+                new ScalingRecord(Instant.parse("2023-11-15T16:25:00.00Z")));
+
+        // Restart time does not factor in
+        assertEquals(Tuple2.of(778.0, 1000.0), getThresholds(700, 0, scalingTracking, conf));
+
+        conf.set(CATCH_UP_DURATION, Duration.ofMinutes(1));
+        assertEquals(Tuple2.of(1128.0, 3450.0), getThresholds(700, 350, scalingTracking, conf));
+        assertEquals(Tuple2.of(778.0, 3100.0), getThresholds(700, 0, scalingTracking, conf));
+
+        // Test thresholds during catchup periods
+        assertEquals(
+                Tuple2.of(1050., Double.POSITIVE_INFINITY),
+                getThresholds(700, 350, scalingTracking, conf, true));
+        assertEquals(
+                Tuple2.of(700., Double.POSITIVE_INFINITY),
+                getThresholds(700, 0, scalingTracking, conf, true));
     }
 
     @Test
@@ -467,14 +502,31 @@ public class ScalingMetricEvaluatorTest {
     }
 
     private Tuple2<Double, Double> getThresholds(
+            double inputTargetRate,
+            double catchUpRate,
+            ScalingTracking scalingTracking,
+            Configuration conf) {
+        return getThresholds(inputTargetRate, catchUpRate, scalingTracking, conf, false);
+    }
+
+    private Tuple2<Double, Double> getThresholds(
             double inputTargetRate, double catchUpRate, Configuration conf, boolean catchingUp) {
+        return getThresholds(inputTargetRate, catchUpRate, new ScalingTracking(), conf, catchingUp);
+    }
+
+    private Tuple2<Double, Double> getThresholds(
+            double inputTargetRate,
+            double catchUpRate,
+            ScalingTracking scalingTracking,
+            Configuration conf,
+            boolean catchingUp) {
         var map = new HashMap<ScalingMetric, EvaluatedScalingMetric>();
 
         map.put(TARGET_DATA_RATE, new EvaluatedScalingMetric(Double.NaN, inputTargetRate));
         map.put(CATCH_UP_DATA_RATE, EvaluatedScalingMetric.of(catchUpRate));
 
         ScalingMetricEvaluator.computeProcessingRateThresholds(
-                map, conf, catchingUp, new ScalingTracking());
+                map, conf, catchingUp, scalingTracking);
         return Tuple2.of(
                 map.get(SCALE_UP_RATE_THRESHOLD).getCurrent(),
                 map.get(SCALE_DOWN_RATE_THRESHOLD).getCurrent());

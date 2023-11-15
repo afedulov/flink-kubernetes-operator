@@ -17,8 +17,11 @@
 
 package org.apache.flink.autoscaler.metrics;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import org.apache.flink.autoscaler.JobAutoScalerContext;
 import org.apache.flink.autoscaler.ScalingSummary;
+import org.apache.flink.autoscaler.ScalingTracking;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.state.AutoScalerStateStore;
 import org.apache.flink.configuration.Configuration;
@@ -110,5 +113,19 @@ public class ScalingHistoryUtils {
             }
         }
         return result;
+    }
+
+    @Nonnull
+    public static <KEY, Context extends JobAutoScalerContext<KEY>>
+            ScalingTracking getTrimmedScalingTracking(
+                    AutoScalerStateStore<KEY, Context> autoScalerStateStore, Context context)
+                    throws Exception {
+        var conf = context.getConfiguration();
+        var scalingTracking = autoScalerStateStore.getScalingTracking(context);
+        // Reusing settings used for scaling history
+        scalingTracking.removeOldRecords(
+                conf.get(AutoScalerOptions.VERTEX_SCALING_HISTORY_AGE),
+                conf.get(AutoScalerOptions.VERTEX_SCALING_HISTORY_COUNT));
+        return scalingTracking;
     }
 }

@@ -53,7 +53,7 @@ public class AutoScalerUtils {
         }
 
         double catchUpTargetSec = conf.get(AutoScalerOptions.CATCH_UP_DURATION).toSeconds();
-        double restartTimeSec = scalingTracking.getMaxRestartTimeOrDefault(conf);
+        double restartTimeSec = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
 
         targetUtilization = Math.max(0., targetUtilization);
         targetUtilization = Math.min(1., targetUtilization);
