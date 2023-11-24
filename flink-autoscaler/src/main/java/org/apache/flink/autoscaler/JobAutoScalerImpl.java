@@ -171,7 +171,7 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         var now = clock.instant();
         // Scaling tracking data contains previous restart times that are taken into account
         var scalingTracking = getTrimmedScalingTracking(stateStore, ctx, now);
-        var restartTime = scalingTracking.getMaxRestartTimeSecondsOrDefault(ctx.getConfiguration());
+        var restartTime = scalingTracking.getRestartTimeEMAOrDefault(ctx.getConfiguration());
         var evaluatedMetrics =
                 evaluator.evaluate(ctx.getConfiguration(), collectedMetrics, restartTime);
         LOG.debug("Evaluated metrics: {}", evaluatedMetrics);
@@ -192,8 +192,9 @@ public class JobAutoScalerImpl<KEY, Context extends JobAutoScalerContext<KEY>>
         // A scaling tracking without an end time gets created whenever a scaling decision is
         // applied. Here, when the job transitions to RUNNING, we record the time for it.
         if (ctx.getJobStatus() == JobStatus.RUNNING) {
-            if (scalingTracking.setEndTimeIfTrackedAndParallelismMatches(
-                    now, jobTopology, scalingHistory)) {
+            var defaultRestartTime = ctx.getConfiguration().get(AutoScalerOptions.RESTART_TIME);
+            if (scalingTracking.setEndTimeIfParallelismMatches(
+                    now, jobTopology, scalingHistory, defaultRestartTime)) {
                 stateStore.storeScalingTracking(ctx, scalingTracking);
             }
         }

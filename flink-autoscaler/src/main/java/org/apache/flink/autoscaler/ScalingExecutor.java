@@ -77,7 +77,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             throws Exception {
 
         var conf = context.getConfiguration();
-        var restartTime = scalingTracking.getMaxRestartTimeSecondsOrDefault(conf);
+        var restartTime = scalingTracking.getRestartTimeEMAOrDefault(conf);
 
         var scalingSummaries =
                 computeScalingSummary(context, evaluatedMetrics, scalingHistory, restartTime);

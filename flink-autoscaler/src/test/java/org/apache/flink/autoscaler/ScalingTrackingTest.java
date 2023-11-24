@@ -126,8 +126,8 @@ class ScalingTrackingTest {
                 initScalingHistoryWithTargetParallelism(lastScaling, actualParallelisms);
 
         boolean result =
-                scalingTracking.setEndTimeIfTrackedAndParallelismMatches(
-                        now, jobTopology, scalingHistory);
+                scalingTracking.setEndTimeIfParallelismMatches(
+                        now, jobTopology, scalingHistory, Duration.ofMinutes(1));
 
         assertThat(result).isTrue();
         assertThat(scalingTracking.getLatestScalingRecordEntry().get().getValue().getEndTime())
@@ -147,8 +147,8 @@ class ScalingTrackingTest {
                 initScalingHistoryWithTargetParallelism(lastScaling, mismatchedParallelisms);
 
         boolean result =
-                scalingTracking.setEndTimeIfTrackedAndParallelismMatches(
-                        now, jobTopology, scalingHistory);
+                scalingTracking.setEndTimeIfParallelismMatches(
+                        now, jobTopology, scalingHistory, Duration.ofMinutes(1));
 
         assertThat(result).isFalse();
         assertThat(scalingTracking.getLatestScalingRecordEntry().get().getValue().getEndTime())

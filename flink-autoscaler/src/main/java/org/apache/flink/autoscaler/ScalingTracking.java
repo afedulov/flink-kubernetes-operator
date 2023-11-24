@@ -17,6 +17,7 @@
 
 package org.apache.flink.autoscaler;
 
+import lombok.AllArgsConstructor;
 import org.apache.flink.annotation.Experimental;
 import org.apache.flink.autoscaler.config.AutoScalerOptions;
 import org.apache.flink.autoscaler.topology.JobTopology;
@@ -40,12 +41,18 @@ import java.util.stream.Collectors;
 /** Stores rescaling related information for the job. */
 @Experimental
 @Data
+@AllArgsConstructor
 @NoArgsConstructor
 @Builder
 public class ScalingTracking {
 
     /** Details related to recent rescaling operations. */
     private final TreeMap<Instant, ScalingRecord> scalingRecords = new TreeMap<>();
+
+    /** Exponential moving average of restart time */
+    private Duration restartTimeEMA;
+
+    private double emaSmoothingFactor = 0.5d;
 
     public void addScalingRecord(Instant startTimestamp, ScalingRecord scalingRecord) {
         scalingRecords.put(startTimestamp, scalingRecord);
@@ -62,7 +69,8 @@ public class ScalingTracking {
 
     /**
      * Sets the end time for the latest scaling record if its parallelism matches the current job
-     * parallelism.
+     * parallelism. Additionally, it updates the exponential moving average that tracks restart
+     * time, if this condition is met.
      *
      * @param now The current instant to be set as the end time of the scaling record.
      * @param jobTopology The current job topology containing details of the job's parallelism.
@@ -71,10 +79,11 @@ public class ScalingTracking {
      *     latest scaling record cannot be found, or the target parallelism does not match the
      *     actual parallelism.
      */
-    public boolean setEndTimeIfTrackedAndParallelismMatches(
+    public boolean setEndTimeIfParallelismMatches(
             Instant now,
             JobTopology jobTopology,
-            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory) {
+            Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
+            Duration restartTimeFromConfig) {
         return getLatestScalingRecordEntry()
                 .map(
                         entry -> {
@@ -88,6 +97,9 @@ public class ScalingTracking {
 
                                 if (targetParallelismMatchesActual(
                                         targetParallelism, actualParallelism)) {
+                                    var restartTime = Duration.between(scalingTimestamp, now);
+                                    restartTimeEMA =
+                                            calculateEMA(restartTime, restartTimeFromConfig);
                                     value.setEndTime(now);
                                     return true;
                                 }
@@ -95,6 +107,16 @@ public class ScalingTracking {
                             return false;
                         })
                 .orElse(false);
+    }
+
+    private Duration calculateEMA(Duration restartTime, Duration defaultRestartTime) {
+        if (restartTime == null) {
+            return defaultRestartTime;
+        }
+        return Duration.ofSeconds(
+                (long)
+                        (restartTimeEMA.getSeconds() * emaSmoothingFactor
+                                + restartTime.getSeconds() * (1 - emaSmoothingFactor)));
     }
 
     private static Map<JobVertexID, Integer> getTargetParallelismOfScaledVertices(
@@ -148,6 +170,24 @@ public class ScalingTracking {
         return maxRestartTime == -1
                 ? restartTimeFromConfig
                 : Duration.ofSeconds(Math.min(maxRestartTime, maxRestartTimeFromConfig));
+    }
+
+    /**
+     * Retrieves the tracked restart time exponential moving average (EMA) based on the provided
+     * configuration. Defaults to the RESTART_TIME from configuration if the
+     * PREFER_TRACKED_RESTART_TIME option is set to false, or if no restarts where yet observed.
+     * Otherwise, the returned restart time EMA is capped by the TRACKED_RESTART_TIME_LIMIT.
+     */
+    public Duration getRestartTimeEMAOrDefault(Configuration conf) {
+        long maxRestartTimeFromConfig =
+                conf.get(AutoScalerOptions.TRACKED_RESTART_TIME_LIMIT).toSeconds();
+        if (conf.get(AutoScalerOptions.PREFER_TRACKED_RESTART_TIME)) {
+            if (restartTimeEMA != null) {
+                return Duration.ofSeconds(
+                        Math.min(restartTimeEMA.toSeconds(), maxRestartTimeFromConfig));
+            }
+        }
+        return conf.get(AutoScalerOptions.RESTART_TIME);
     }
 
     /**
