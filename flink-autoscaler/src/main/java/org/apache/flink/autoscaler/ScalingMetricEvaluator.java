@@ -64,7 +64,7 @@ public class ScalingMetricEvaluator {
 
     public Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluate(
             Configuration conf, CollectedMetricHistory collectedMetrics, Duration restartTime) {
-
+        LOG.debug("Restart time used in metrics evaluation: {}", restartTime);
         var scalingOutput = new HashMap<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>>();
         var metricsHistory = collectedMetrics.getMetricHistory();
         var topology = collectedMetrics.getJobTopology();

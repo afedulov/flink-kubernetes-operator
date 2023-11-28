@@ -165,7 +165,7 @@ public class ScalingExecutor<KEY, Context extends JobAutoScalerContext<KEY>> {
             Map<JobVertexID, Map<ScalingMetric, EvaluatedScalingMetric>> evaluatedMetrics,
             Map<JobVertexID, SortedMap<Instant, ScalingSummary>> scalingHistory,
             Duration restartTime) {
-
+        LOG.debug("Restart time used in scaling summary computation: {}", restartTime);
         var out = new HashMap<JobVertexID, ScalingSummary>();
         var excludeVertexIdList =
                 context.getConfiguration().get(AutoScalerOptions.VERTEX_EXCLUDE_IDS);

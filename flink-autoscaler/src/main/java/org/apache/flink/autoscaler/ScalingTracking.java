@@ -99,7 +99,13 @@ public class ScalingTracking {
                                             scalingTimestamp,
                                             now);
                                     return true;
+                                } else {
+                                    LOG.debug("Cannot set end time due to parallelism mismatch");
                                 }
+                            } else {
+                                LOG.debug(
+                                        "Cannot record end time because already set in the latest record: {}",
+                                        value.getEndTime());
                             }
                             return false;
                         })
@@ -150,6 +156,7 @@ public class ScalingTracking {
                     maxRestartTime = Math.max(restartTime, maxRestartTime);
                 }
             }
+            LOG.debug("Maximum tracked restart time: {}", maxRestartTime);
         }
         var restartTimeFromConfig = conf.get(AutoScalerOptions.RESTART_TIME);
         long maxRestartTimeFromConfig =
