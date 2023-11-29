@@ -99,8 +99,6 @@ public class ScalingTracking {
                                             scalingTimestamp,
                                             now);
                                     return true;
-                                } else {
-                                    LOG.debug("Cannot set end time due to parallelism mismatch");
                                 }
                             } else {
                                 LOG.debug(
@@ -135,7 +133,15 @@ public class ScalingTracking {
                             var vertexID = entry.getKey();
                             var targetParallelism = entry.getValue();
                             var actualParallelism = actualParallelisms.getOrDefault(vertexID, -1);
-                            return actualParallelism.equals(targetParallelism);
+                            boolean isEqual = actualParallelism.equals(targetParallelism);
+                            if (!isEqual) {
+                                LOG.debug(
+                                        "Vertex {} actual parallelism {} does not match target parallelism {}",
+                                        vertexID,
+                                        actualParallelism,
+                                        targetParallelism);
+                            }
+                            return isEqual;
                         });
     }
 
